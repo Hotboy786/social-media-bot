@@ -35,7 +35,12 @@ import re
 import random
 import time
 import shutil
-import requests
+import smtplib
+import ssl
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.header import Header
+from email.utils import formataddr
 import streamlit as st
 import undetected_chromedriver as uc
 from selenium.webdriver.common.action_chains import ActionChains
@@ -63,10 +68,52 @@ st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 # --- CONFIGURATION ---
 ADMIN_EMAIL = "kingtechnical421@gmail.com"
 SHARED_PASSCODE = "Madara786@@"
-# In-memory mock database for registered users and verified status
+
+# Your Gmail SMTP Configuration
+SMTP_SENDER_EMAIL = "kingtechnical421@gmail.com"
+SMTP_APP_PASSWORD = "YOUR_16_CHAR_GMAIL_APP_PASSWORD" # Replace with your generated Google App Password
+
 if "registered_users" not in st.session_state:
-    st.session_state["registered_users"] = {} # format: {email: {"verified": bool, "code": str}}
+    st.session_state["registered_users"] = {}
 # ----------------------------------------------------
+
+
+def send_verification_email(receiver_email, code):
+    """Sends a real 6-digit verification code email displaying 'Madara Uchiha' as the sender."""
+    message = MIMEMultipart("alternative")
+    message["Subject"] = "🔒 Your Social Media Bot Verification Code"
+    
+    # Format 'From' display name as Madara Uchiha
+    message["From"] = formataddr((str(Header("Madara Uchiha", "utf-8")), SMTP_SENDER_EMAIL))
+    message["To"] = receiver_email
+
+    text_content = f"Hello,\n\nMadara Uchiha sent you a 6-digit verification code: {code}\n\nEnter this code on the login page to access your bot session."
+    html_content = f"""
+    <html>
+      <body>
+        <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #ddd; border-radius: 5px;">
+          <h2 style="color: #ff4b4b;">Social Media Traffic Bot</h2>
+          <p>Hello,</p>
+          <p><strong>Madara Uchiha</strong> sent you a 6-digit verification code:</p>
+          <h1 style="background: #f0f2f6; padding: 10px; text-align: center; letter-spacing: 5px; color: #31333f;">{code}</h1>
+          <p>Please enter this code in the login portal to complete your verification.</p>
+        </div>
+      </body>
+    </html>
+    """
+
+    message.attach(MIMEText(text_content, "plain"))
+    message.attach(MIMEText(html_content, "html"))
+
+    try:
+        context = ssl.create_default_context()
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as server:
+            server.login(SMTP_SENDER_EMAIL, SMTP_APP_PASSWORD)
+            server.sendmail(SMTP_SENDER_EMAIL, receiver_email, message.as_string())
+        return True
+    except Exception as e:
+        print(f"SMTP Error: {e}")
+        return False
 
 
 # --- Advanced Auth Gate ---
@@ -84,7 +131,6 @@ def check_authentication():
         user_email = st.text_input("Your Email Address", key="user_email_field")
         user_pass = st.text_input("Passcode", type="password", key="user_pass_field")
 
-        # Initialize tracking states
         if "pending_email" not in st.session_state:
             st.session_state["pending_email"] = None
 
@@ -99,23 +145,24 @@ def check_authentication():
                 clean_email = user_email.strip().lower()
                 users_db = st.session_state["registered_users"]
 
-                # Check if user is already verified
                 if clean_email in users_db and users_db[clean_email].get("verified", False):
                     st.session_state["auth_role"] = "user"
                     st.session_state["user_email"] = clean_email
                     st.rerun()
                 else:
-                    # First time login: Generate 6-digit verification code
                     gen_code = str(random.randint(100000, 999999))
                     if clean_email not in users_db:
                         users_db[clean_email] = {"verified": False}
                     users_db[clean_email]["code"] = gen_code
                     st.session_state["pending_email"] = clean_email
                     
-                    # Simulated email dispatch notification
-                    st.info(f"📧 [Mock Email Service Sent to {clean_email}]: Your 6-digit verification code is **{gen_code}**")
+                    with st.spinner("Sending verification email from Madara Uchiha..."):
+                        success = send_verification_email(clean_email, gen_code)
+                        if success:
+                            st.success(f"📧 A 6-digit verification code from **Madara Uchiha** has been sent to **{clean_email}**. Check your inbox/spam folder.")
+                        else:
+                            st.error("❌ Failed to send email. Please check your Gmail App Password configuration.")
 
-        # If verification code is pending for this user session
         if st.session_state.get("pending_email"):
             st.markdown("---")
             st.write(f"Enter the 6-digit code sent to **{st.session_state['pending_email']}**:")
