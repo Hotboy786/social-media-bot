@@ -1,3 +1,35 @@
+import sys
+import types
+
+# --- Python 3.12+ Compatibility Fix for distutils ---
+try:
+    import distutils
+except ImportError:
+    distutils = types.ModuleType('distutils')
+    sys.modules['distutils'] = distutils
+
+try:
+    from distutils.version import LooseVersion
+except (ImportError, ModuleNotFoundError):
+    class LooseVersion:
+        def __init__(self, vstring):
+            self.vstring = vstring
+        def __str__(self):
+            return self.vstring
+        def _parse(self, vstring):
+            return tuple(int(x) for x in vstring.split('.') if x.isdigit())
+        def __lt__(self, other): return self._parse(self.vstring) < self._parse(other.vstring)
+        def __le__(self, other): return self._parse(self.vstring) <= self._parse(other.vstring)
+        def __eq__(self, other): return self._parse(self.vstring) == self._parse(other.vstring)
+        def __ge__(self, other): return self._parse(self.vstring) >= self._parse(other.vstring)
+        def __gt__(self, other): return self._parse(self.vstring) > self._parse(other.vstring)
+        def __ne__(self, other): return self._parse(self.vstring) != self._parse(other.vstring)
+    
+    dv_mod = types.ModuleType('distutils.version')
+    dv_mod.LooseVersion = LooseVersion
+    sys.modules['distutils.version'] = dv_mod
+# ----------------------------------------------------
+
 import os
 import random
 import time
@@ -188,6 +220,15 @@ with st.sidebar:
     st.markdown("---")
     start_clicked = st.button("▶ Start Bot Task", type="primary", use_container_width=True)
 
+    # --- Share This Bot Section ---
+    st.markdown("---")
+    st.header("📤 Share This Bot")
+    st.markdown("Share this live web tool with your friends or community:")
+    
+    live_app_url = "https://social-media-bot.streamlit.app"
+    st.text_input("App Link", value=live_app_url, key="share_link")
+    st.caption("Copy the link above to share anywhere!")
+
 # Main Dashboard
 col1, col2 = st.columns(2)
 with col1:
@@ -225,7 +266,7 @@ if start_clicked:
         completion_time_str = time.strftime("%I:%M:%S %p", time.localtime(completion_timestamp))
         eta_metric.metric(label="Order ETA", value=completion_time_str)
 
-        status_box.warning(f"Running task for {platform} | Target: {total_views} views...")
+        status_box.warning(f"Running task for platform | Target: {total_views} views...")
 
         for i in range(total_views):
             is_extended_view = (i in extended_indices)
