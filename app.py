@@ -128,6 +128,18 @@ def check_authentication():
     with tab_user:
         st.subheader("User Portal")
         
+        # --- Built-in User Guide Expander ---
+        with st.expander("📖 How to Register & Login (Click to read guide)", expanded=True):
+            st.markdown("""
+            Welcome! Follow these simple steps to access your account:
+            1. **First-Time Users:** Enter your email address below and click **Continue**. 
+            2. Check your inbox (or spam folder) for an email from **Madara Uchiha** containing your 6-digit verification code.
+            3. Enter the 6-digit code on the screen and click **Verify Code**.
+            4. Create and confirm your own **personal passcode** (this is a one-time process!).
+            5. **Future Logins:** Whenever you return, just type your email and your created passcode to log in instantly.
+            """)
+        st.markdown("---")
+        
         # Initialize state flow trackers
         if "user_flow_step" not in st.session_state:
             st.session_state["user_flow_step"] = "input_email"
