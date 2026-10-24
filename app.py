@@ -88,6 +88,10 @@ if not check_password():
     st.stop()
 # -----------------------------------------------
 
+# Initialize session state for cancellation control
+if "stop_requested" not in st.session_state:
+    st.session_state["stop_requested"] = False
+
 # Ensure local image cache folder exists
 os.makedirs("./images", exist_ok=True)
 
@@ -114,7 +118,6 @@ def validate_url_for_platform(url, platform):
 
 
 def extract_youtube_id(url):
-    """Extracts YouTube video ID from standard or shorts URLs."""
     patterns = [
         r'(?:v=|/v/|embed/|shorts/)([0-9A-Za-z_-]{11})',
         r'(?:youtu\.be/)([0-9A-Za-z_-]{11})'
@@ -129,15 +132,35 @@ def extract_youtube_id(url):
 def human_bezier_mouse_move(driver):
     try:
         actions = ActionChains(driver)
-        steps = random.randint(5, 9)
+        steps = random.randint(4, 8)
         for _ in range(steps):
-            dx = random.randint(-20, 20)
-            dy = random.randint(-20, 20)
+            dx = random.randint(-25, 25)
+            dy = random.randint(-25, 25)
             actions.move_by_offset(dx, dy)
-            actions.pause(random.uniform(0.05, 0.15))
+            actions.pause(random.uniform(0.03, 0.12))
         actions.perform()
     except Exception:
         pass
+
+
+def calculate_organic_watch_time(video_length, is_extended_view):
+    """Calculates organic watch duration with randomized Gaussian variation and micro-jitter."""
+    if is_extended_view:
+        # High retention (looped watch ~105% to 130%)
+        mean_pct = 1.15
+        std_dev_pct = 0.08
+    else:
+        # Standard organic retention (~45% to 85%)
+        mean_pct = 0.65
+        std_dev_pct = 0.12
+
+    # Draw from normal distribution to mimic human behavior distribution
+    target_pct = random.gauss(mean_pct, std_dev_pct)
+    target_pct = max(0.35, min(target_pct, 1.45))  # Keep within human bounds
+
+    # Calculate base watch duration + add random fractional jitter
+    watch_time = (video_length * target_pct) + random.uniform(-2.0, 3.5)
+    return max(8, int(watch_time))
 
 
 def run_single_social_session(
@@ -180,170 +203,12 @@ def run_single_social_session(
 
         status_box.text(f"Session #{session_id} [{platform}]: Navigating to link...")
         driver.get(target_url)
-        time.sleep(4)
+        time.sleep(random.uniform(3.5, 5.2))  # Randomized initial page arrival pause
 
         try:
-            driver.execute_script("window.scrollBy(0, window.innerHeight / 4);")
-            time.sleep(1)
-            video_element = driver.find_element(By.TAG_NAME, "video")
-            actions = ActionChains(driver)
-            actions.move_to_element(video_element).click().perform()
-        except Exception:
-            try:
-                if platform == "YouTube Shorts":
-                    driver.find_element(By.CLASS_NAME, "ytp-play-button").click()
-                elif platform == "TikTok Reel":
-                    driver.find_element(By.TAG_NAME, "button").click()
-                elif platform == "Instagram Reel":
-                    driver.find_element(By.TAG_NAME, "section").click()
-            except Exception:
-                pass
-
-        if is_extended_view:
-            target_percentage = random.uniform(1.05, 1.15)
-            mode_tag = "🔥 High Retention (110%)"
-        else:
-            target_percentage = random.uniform(0.50, 0.75)
-            mode_tag = "Standard"
-
-        total_watch_time = int(video_length * target_percentage)
-        total_watch_time = max(10, total_watch_time)
-
-        status_box.text(f"Session #{session_id} [{platform}] ({mode_tag}): Playing {total_watch_time}s...")
-
-        elapsed = 0
-        while elapsed < total_watch_time:
-            if elapsed % 3 == 0:
-                human_bezier_mouse_move(driver)
-                driver.execute_script("window.dispatchEvent(new Event('mousemove'));")
-
-            time.sleep(1)
-            elapsed += 1
-            progress_val = min(1.0, elapsed / total_watch_time)
-            progress_bar.progress(
-                progress_val,
-                text=f"Session #{session_id} | Elapsed: {elapsed}s / {total_watch_time}s ({mode_tag})"
-            )
-
-        return True
-
-    except Exception as e:
-        print(f"Session #{session_id} Error: {str(e)}")
-        status_box.text(f"Status: Error in Session #{session_id} - {str(e)[:50]}...")
-        return False
-    finally:
-        if driver:
-            try:
-                driver.quit()
-            except Exception:
-                pass
-            driver = None
-        try:
-            if os.path.exists(profile_dir):
-                shutil.rmtree(profile_dir, ignore_errors=True)
-        except Exception:
-            pass
-
-
-# --- Streamlit UI Layout ---
-st.title("🛡️ Social Media Organic Traffic Bot")
-st.markdown("### Anti-Detect Shielded Traffic & View Generator")
-st.write("Supports **YouTube Shorts**, **TikTok Reels**, and **Instagram Reels**.")
-
-with st.sidebar:
-    st.header("⚙️ Configuration")
-    platform = st.selectbox("Select Platform", ["YouTube Shorts", "TikTok Reel", "Instagram Reel"])
-    target_url = st.text_input("Target URL", placeholder="https://www.youtube.com/shorts/...")
-    total_views = st.number_input("Target Views Count", min_value=1, max_value=100, value=5)
-    
-    st.markdown("---")
-    st.header("🌐 Proxy Pool Options")
-    use_proxy = st.checkbox("Enable Proxy Pool", value=False)
-    proxy_input = ""
-    proxy_list = []
-    
-    if use_proxy:
-        proxy_input = st.text_area(
-            "Proxy List (One per line)", 
-            placeholder="192.168.1.1:8080\nusername:password@192.168.1.2:8080",
-            help="Paste your list of proxies here. A random proxy will be picked for each view session."
-        )
-        if proxy_input:
-            proxy_list = [line.strip() for line in proxy_input.split("\n") if line.strip()]
-        st.caption(f"Loaded proxies in pool: {len(proxy_list)}")
-
-    is_headless = st.checkbox("Run in Background (Headless)", value=True)
-    
-    st.markdown("---")
-    start_clicked = st.button("▶ Start Bot Task", type="primary", use_container_width=True)
-
-# Main Dashboard layout & Thumbnail preview
-col1, col2, col3 = st.columns([1, 1, 1])
-with col1:
-    views_metric = st.metric(label="Views Generated", value="0 / 0")
-with col2:
-    eta_metric = st.metric(label="Order ETA", value="--:--:--")
-with col3:
-    if platform == "YouTube Shorts" and target_url:
-        yt_id = extract_youtube_id(target_url)
-        if yt_id:
-            st.image(f"https://img.youtube.com/vi/{yt_id}/hqdefault.jpg", width=140, caption="Target Thumbnail")
-
-st.markdown("### 📊 Live Session Dashboard")
-status_box = st.empty()
-status_box.info("Status: Ready to initialize tasks.")
-progress_bar = st.progress(0, text="Progress: Waiting for initiation...")
-
-# Execution Trigger
-if start_clicked:
-    if not target_url.strip():
-        st.error("Please enter a valid target URL!")
-    elif not validate_url_for_platform(target_url, platform):
-        st.error(f"URL Mismatch Error! The URL does not match the selected platform: {platform}")
-    else:
-        if platform == "YouTube Shorts":
-            video_length = random.randint(15, 30)
-        elif platform == "TikTok Reel":
-            video_length = random.randint(15, 25)
-        else:
-            video_length = random.randint(15, 30)
-
-        successful_views = 0
-        extended_count = int(total_views * 0.20)
-        extended_indices = set(random.sample(range(total_views), extended_count)) if total_views > 0 else set()
-
-        avg_view_duration = (video_length * 0.70) + 8
-        total_estimated_seconds = int(total_views * avg_view_duration)
-        completion_timestamp = time.time() + total_estimated_seconds
-        completion_time_str = time.strftime("%I:%M:%S %p", time.localtime(completion_timestamp))
-        eta_metric.metric(label="Order ETA", value=completion_time_str)
-
-        status_box.warning(f"Running task for {platform} | Target: {total_views} views...")
-
-        for i in range(total_views):
-            is_extended_view = (i in extended_indices)
+            # Simulate natural scroll micro-bursts
+            scroll_amount = random.randint(150, 350)
+            driver.execute_script(f"window.scrollBy(0, {scroll_amount});")
+            time.sleep(random.uniform(0.8, 1.5))
             
-            success = run_single_social_session(
-                session_id=i + 1,
-                target_url=target_url,
-                platform=platform,
-                is_headless=is_headless,
-                is_extended_view=is_extended_view,
-                video_length=video_length,
-                proxy_list=proxy_list,
-                status_box=status_box,
-                progress_bar=progress_bar
-            )
-
-            if success:
-                successful_views += 1
-
-            views_metric.metric(label="Views Generated", value=f"{successful_views} / {total_views}")
-
-            if i + 1 < total_views:
-                organic_delay = random.randint(2, 4)
-                status_box.text(f"Transitioning: Next session in {organic_delay}s...")
-                time.sleep(organic_delay)
-
-        status_box.success(f"Task completed successfully! Generated {successful_views}/{total_views} views.")
-        st.balloons()
+            video_element = driver.find_element(By
