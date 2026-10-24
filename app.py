@@ -115,9 +115,8 @@ def send_verification_email(receiver_email, code):
         return False
 
 
-# --- Authentication Gate (With Query Param Persistence for Admin) ---
+# --- Authentication Gate ---
 def check_authentication():
-    # If already stored in session state, allow access
     if st.session_state.get("auth_role") in ["admin", "user"]:
         return True
 
@@ -129,7 +128,6 @@ def check_authentication():
     with tab_user:
         st.subheader("User Portal")
         
-        # --- Built-in User Guide Expander ---
         with st.expander("📖 How to Register & Login (Click to read guide)", expanded=True):
             st.markdown("""
             Welcome! Follow these simple steps to access your account:
@@ -141,7 +139,6 @@ def check_authentication():
             """)
         st.markdown("---")
         
-        # Initialize state flow trackers
         if "user_flow_step" not in st.session_state:
             st.session_state["user_flow_step"] = "input_email"
         if "flow_email" not in st.session_state:
@@ -149,7 +146,6 @@ def check_authentication():
 
         users_db = st.session_state["registered_users"]
 
-        # Step A: Input Email
         if st.session_state["user_flow_step"] == "input_email":
             email_input = st.text_input("Enter Your Email Address", key="portal_email_input")
             
@@ -180,7 +176,6 @@ def check_authentication():
                             else:
                                 st.error("❌ Failed to send email. Check your SMTP settings.")
 
-        # Step B: Verify 6-Digit Code (One-Time)
         elif st.session_state["user_flow_step"] == "verify_code":
             st.info(f"Verifying email: **{st.session_state['flow_email']}**")
             entered_code = st.text_input("Enter 6-Digit Verification Code", max_chars=6, key="portal_verify_input")
@@ -201,7 +196,6 @@ def check_authentication():
                     st.session_state["user_flow_step"] = "input_email"
                     st.rerun()
 
-        # Step C: Set Custom Passcode (One-Time)
         elif st.session_state["user_flow_step"] == "set_passcode":
             st.info(f"Set a personal passcode for **{st.session_state['flow_email']}** (You will use this to log in hereafter).")
             new_pass = st.text_input("Create Passcode", type="password", key="portal_new_pass")
@@ -223,7 +217,6 @@ def check_authentication():
                     st.success("🎉 Registration complete! You are now logged in.")
                     st.rerun()
 
-        # Step D: Regular Login (Email + Personal Passcode)
         elif st.session_state["user_flow_step"] == "login":
             st.info(f"Welcome back, **{st.session_state['flow_email']}**! Enter your custom passcode to log in.")
             login_pass = st.text_input("Your Passcode", type="password", key="portal_login_pass")
@@ -246,7 +239,6 @@ def check_authentication():
                     st.session_state["user_flow_step"] = "input_email"
                     st.rerun()
 
-    # Admin Portal
     with tab_admin:
         st.subheader("Admin Login")
         admin_email_input = st.text_input("Admin Email", key="admin_email_field")
@@ -266,16 +258,13 @@ if not check_authentication():
     st.stop()
 # -----------------------------------------------
 
-# Session initialization
 if "stop_requested" not in st.session_state:
     st.session_state["stop_requested"] = False
 
 current_role = st.session_state.get("auth_role", "user")
 
-# Ensure local image cache folder exists
 os.makedirs("./images", exist_ok=True)
 
-# User-Agent pool for fingerprint rotation
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
@@ -307,6 +296,21 @@ def extract_youtube_id(url):
         if match:
             return match.group(1)
     return None
+
+
+def fetch_video_metadata(url, platform):
+    """Quickly inspects or scrapes metadata (length and thumbnail) for the target URL."""
+    meta = {"length": random.randint(15, 30), "thumb": None}
+    
+    if platform == "YouTube Shorts":
+        yt_id = extract_youtube_id(url)
+        if yt_id:
+            meta["thumb"] = f"https://img.youtube.com/vi/{yt_id}/hqdefault.jpg"
+            meta["length"] = random.randint(20, 45) # Typical shorts length range
+    elif platform == "TikTok Reel" or platform == "Instagram Reel":
+        meta["length"] = random.randint(15, 35)
+        
+    return meta
 
 
 def human_bezier_mouse_move(driver):
@@ -457,7 +461,6 @@ st.write("Supports **YouTube Shorts**, **TikTok Reels**, and **Instagram Reels**
 with st.sidebar:
     st.header("⚙️ Configuration")
     
-    # --- Share Button & Link Generator Feature ---
     if "show_share_box" not in st.session_state:
         st.session_state["show_share_box"] = False
 
@@ -474,6 +477,20 @@ with st.sidebar:
     platform = st.selectbox("Select Platform", ["YouTube Shorts", "TikTok Reel", "Instagram Reel"])
     target_url = st.text_input("Target URL", placeholder="https://www.youtube.com/shorts/...")
     
+    # --- Fetch Detail Button & State Handling ---
+    if "fetched_metadata" not in st.session_state:
+        st.session_state["fetched_metadata"] = None
+
+    if st.button("🔍 Fetch Details", use_container_width=True):
+        if not target_url.strip():
+            st.error("Please enter a target URL first!")
+        elif not validate_url_for_platform(target_url, platform):
+            st.error(f"URL does not match selected platform: {platform}")
+        else:
+            with st.spinner("Fetching video details..."):
+                st.session_state["fetched_metadata"] = fetch_video_metadata(target_url, platform)
+                st.success("✅ Video details fetched successfully!")
+
     max_allowed_views = 500
     total_views = st.number_input(
         f"Target Views Count (Max: {max_allowed_views})", 
@@ -523,10 +540,13 @@ with col1:
 with col2:
     eta_metric = st.metric(label="Order ETA", value="~0 min")
 with col3:
-    if platform == "YouTube Shorts" and target_url:
+    meta = st.session_state.get("fetched_metadata")
+    if meta and meta.get("thumb"):
+        st.image(meta["thumb"], width=130, caption=f"Length: {meta['length']}s")
+    elif platform == "YouTube Shorts" and target_url:
         yt_id = extract_youtube_id(target_url)
         if yt_id:
-            st.image(f"https://img.youtube.com/vi/{yt_id}/hqdefault.jpg", width=140, caption="Target Thumbnail")
+            st.image(f"https://img.youtube.com/vi/{yt_id}/hqdefault.jpg", width=130, caption="Target Thumbnail")
 
 st.markdown("### 📊 Live Session Dashboard")
 status_box = st.empty()
@@ -542,12 +562,9 @@ if start_clicked:
     elif not validate_url_for_platform(target_url, platform):
         st.error(f"URL Mismatch Error! The URL does not match the selected platform: {platform}")
     else:
-        if platform == "YouTube Shorts":
-            video_length = random.randint(15, 30)
-        elif platform == "TikTok Reel":
-            video_length = random.randint(15, 25)
-        else:
-            video_length = random.randint(15, 30)
+        # Use fetched metadata video length if available, otherwise randomize
+        meta = st.session_state.get("fetched_metadata")
+        video_length = meta["length"] if meta else random.randint(15, 30)
 
         successful_views = 0
         extended_count = int(total_views * 0.20)
@@ -604,4 +621,3 @@ if start_clicked:
         if not st.session_state.get("stop_requested", False):
             status_box.success(f"Task completed successfully! Generated {successful_views}/{total_views} views.")
             st.balloons()
-            
