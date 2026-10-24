@@ -130,7 +130,7 @@ def check_authentication():
         
         # Initialize state flow trackers
         if "user_flow_step" not in st.session_state:
-            st.session_state["user_flow_step"] = "input_email" # input_email -> verify_code -> set_passcode -> login
+            st.session_state["user_flow_step"] = "input_email"
         if "flow_email" not in st.session_state:
             st.session_state["flow_email"] = ""
 
@@ -150,11 +150,9 @@ def check_authentication():
                     st.session_state["flow_email"] = clean_email
 
                     if clean_email in users_db and users_db[clean_email].get("registered", False):
-                        # User ALREADY registered before -> Jump straight to password login!
                         st.session_state["user_flow_step"] = "login"
                         st.rerun()
                     else:
-                        # First time user -> Send 6-digit verification code
                         gen_code = str(random.randint(100000, 999999))
                         if clean_email not in users_db:
                             users_db[clean_email] = {}
@@ -206,10 +204,9 @@ def check_authentication():
                     users_db[target_email]["passcode"] = new_pass
                     users_db[target_email]["registered"] = True
                     
-                    # Log them in right away
                     st.session_state["auth_role"] = "user"
                     st.session_state["user_email"] = target_email
-                    st.session_state["user_flow_step"] = "input_email" # reset flow
+                    st.session_state["user_flow_step"] = "input_email"
                     st.success("🎉 Registration complete! You are now logged in.")
                     st.rerun()
 
@@ -273,7 +270,7 @@ USER_AGENTS = [
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
 ]
 
-uc.Chrome.__del> = lambda self: None
+uc.Chrome.__del__ = lambda self: None
 
 
 def validate_url_for_platform(url, platform):
