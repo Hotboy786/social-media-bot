@@ -115,8 +115,9 @@ def send_verification_email(receiver_email, code):
         return False
 
 
-# --- Authentication Gate ---
+# --- Authentication Gate (With Query Param Persistence for Admin) ---
 def check_authentication():
+    # If already stored in session state, allow access
     if st.session_state.get("auth_role") in ["admin", "user"]:
         return True
 
@@ -552,7 +553,6 @@ if start_clicked:
         extended_count = int(total_views * 0.20)
         extended_indices = set(random.sample(range(total_views), extended_count)) if total_views > 0 else set()
 
-        # Calculate ETA in hours/minutes duration format (e.g. ~1 hour, ~2 hours)
         avg_view_duration = (video_length * 0.70) + 12
         total_estimated_seconds = int(total_views * avg_view_duration)
         
@@ -568,7 +568,6 @@ if start_clicked:
 
         eta_metric.metric(label="Order ETA", value=eta_str)
 
-        # Notification informing users they can close the web or shut down their device
         st.success("🚀 **Order Submitted Successfully!** You can now safely leave this web page or shut down your device—the bot will continue processing your views in the background.")
 
         status_box.warning(f"Running task for {platform} | Target: {total_views} views...")
@@ -605,3 +604,4 @@ if start_clicked:
         if not st.session_state.get("stop_requested", False):
             status_box.success(f"Task completed successfully! Generated {successful_views}/{total_views} views.")
             st.balloons()
+            
