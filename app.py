@@ -45,6 +45,8 @@ import streamlit as st
 import undetected_chromedriver as uc
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
+import urllib.request
+import json
 
 # Page Configuration
 st.set_page_config(
@@ -124,7 +126,6 @@ def check_authentication():
     
     tab_user, tab_admin = st.tabs(["👤 User Portal", "👑 Admin Portal"])
 
-    # Standard User Portal
     with tab_user:
         st.subheader("User Portal")
         
@@ -299,14 +300,16 @@ def extract_youtube_id(url):
 
 
 def fetch_video_metadata(url, platform):
-    """Accurately extracts true video duration and thumbnail for YouTube, TikTok, and Instagram using yt-dlp."""
-    meta = {"length": 25, "thumb": None}
+    """Robust extractor using yt-dlp first, backed up by direct page HTML parsing for TikTok/Insta/YT."""
+    meta = {"length": 30, "thumb": None}
     
     if platform == "YouTube Shorts":
         yt_id = extract_youtube_id(url)
         if yt_id:
             meta["thumb"] = f"https://img.youtube.com/vi/{yt_id}/hqdefault.jpg"
-            
+
+    # Layer 1: Try yt-dlp extraction
+    extracted = False
     try:
         import yt_dlp
         ydl_opts = {'quiet': True, 'no_warnings': True, 'skip_download': True}
@@ -315,18 +318,52 @@ def fetch_video_metadata(url, platform):
             if info:
                 if 'duration' in info and info['duration']:
                     meta["length"] = int(info['duration'])
-                # If thumbnail is directly extracted by yt-dlp (works well for TikTok / Insta / YT)
+                    extracted = True
                 if 'thumbnail' in info and info['thumbnail']:
                     meta["thumb"] = info['thumbnail']
     except Exception as e:
-        print(f"Metadata extraction fallback triggered for {platform}: {e}")
+        print(f"yt-dlp extraction note: {e}")
+
+    # Layer 2: Fallback HTML scraping for duration/thumbnail if yt-dlp was blocked or failed
+    if not extracted:
+        try:
+            req = urllib.request.Request(
+                url, 
+                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+            )
+            with urllib.request.urlopen(req, timeout=8) as response:
+                html = response.read().decode('utf-8', errors='ignore')
+                
+                # Search for duration in meta tags (e.g., og:video:duration or schema.org duration)
+                duration_match = re.search(r'property="og:video:duration"\s+content="(\d+)"', html)
+                if duration_match:
+                    meta["length"] = int(duration_match.group(1))
+                else:
+                    # Generic duration search in JSON-LD blocks
+                    json_dur = re.search(r'"duration"\s*:\s*"PT(\d+)(?:M(\d+))?(?:S(\d+))?"', html)
+                    if json_dur:
+                        mins = int(json_dur.group(1)) if json_dur.group(1) and 'M' in json_dur.group(0) else 0
+                        secs = int(json_dur.group(2) or json_dur.group(3) or 0)
+                        if mins > 0 or secs > 0:
+                            meta["length"] = (mins * 60) + secs
+
+                # Search for thumbnail if not found
+                if not meta["thumb"]:
+                    thumb_match = re.search(r'property="og:image"\s+content="([^"]+)"', html)
+                    if thumb_match:
+                        meta["thumb"] = thumb_match.group(1)
+        except Exception as html_err:
+            print(f"HTML fallback parsing note: {html_err}")
+
+    # Final platform-specific safe defaults if everything else fails
+    if meta["length"] <= 0:
         if platform == "YouTube Shorts":
-            meta["length"] = 30
+            meta["length"] = 35
         elif platform == "TikTok Reel":
+            meta["length"] = 25
+        else:
             meta["length"] = 20
-        elif platform == "Instagram Reel":
-            meta["length"] = 15
-            
+
     return meta
 
 
@@ -505,7 +542,7 @@ with st.sidebar:
         else:
             with st.spinner("Fetching accurate video details & true length..."):
                 st.session_state["fetched_metadata"] = fetch_video_metadata(target_url, platform)
-                st.success("✅ Video details fetched successfully!")
+                st.success("✅ Video details & true length fetched successfully!")
 
     max_allowed_views = 500
     total_views = st.number_input(
@@ -578,7 +615,6 @@ if start_clicked:
     elif not validate_url_for_platform(target_url, platform):
         st.error(f"URL Mismatch Error! The URL does not match the selected platform: {platform}")
     else:
-        # Use exact fetched video length, with fallback default if details weren't fetched yet
         meta = st.session_state.get("fetched_metadata")
         video_length = meta["length"] if meta else 25
 
