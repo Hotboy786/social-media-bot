@@ -3,3 +3,4 @@ undetected-chromedriver
 selenium
 requests
 Pillow
+setuptools
