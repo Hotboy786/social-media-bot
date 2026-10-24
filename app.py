@@ -299,7 +299,6 @@ def extract_youtube_id(url):
 
 
 def fetch_video_metadata(url, platform):
-    """Fetches thumbnail safely for preview display."""
     meta = {"thumb": None}
     if platform == "YouTube Shorts":
         yt_id = extract_youtube_id(url)
@@ -397,9 +396,7 @@ def run_single_social_session(
             except Exception:
                 pass
 
-        # Random watch duration between 10 and 17 seconds per session
         total_watch_time = random.randint(10, 17)
-
         status_box.text(f"Session #{session_id} [{platform}]: Watching for {total_watch_time}s...")
 
         elapsed = 0
@@ -528,9 +525,11 @@ with st.sidebar:
 # Dashboard View
 col1, col2, col3 = st.columns([1, 1, 1])
 with col1:
-    views_metric = st.metric(label="Views Generated", value="0 / 0")
+    views_metric_placeholder = st.empty()
+    views_metric_placeholder.metric(label="Views Generated", value="0 / 0")
 with col2:
-    eta_metric = st.metric(label="Order ETA", value="~0 min")
+    eta_metric_placeholder = st.empty()
+    eta_metric_placeholder.metric(label="Order ETA", value="~0 min")
 with col3:
     meta = st.session_state.get("fetched_metadata")
     if meta and meta.get("thumb"):
@@ -556,7 +555,6 @@ if start_clicked:
     else:
         successful_views = 0
         
-        # Average ~15 seconds per session (10-17 range)
         total_estimated_seconds = int(total_views * 16)
         total_minutes = int(total_estimated_seconds / 60)
         if total_minutes >= 60:
@@ -568,7 +566,7 @@ if start_clicked:
         else:
             eta_str = f"~{max(1, total_minutes)} min"
 
-        eta_metric.metric(label="Order ETA", value=eta_str)
+        eta_metric_placeholder.metric(label="Order ETA", value=eta_str)
 
         st.success("🚀 **Order Submitted Successfully!** You can now safely leave this web page or shut down your device—the bot will continue processing your views in the background.")
 
@@ -592,7 +590,8 @@ if start_clicked:
             if success:
                 successful_views += 1
 
-            views_metric.metric(label="Views Generated", value=f"{successful_views} / {total_views}")
+            # LIVE UPDATE PLACEHOLDER
+            views_metric_placeholder.metric(label="Views Generated", value=f"{successful_views} / {total_views}")
 
             if i + 1 < total_views and not st.session_state.get("stop_requested", False):
                 organic_delay = random.uniform(2.5, 6.0)
