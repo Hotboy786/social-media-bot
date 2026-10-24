@@ -60,38 +60,104 @@ hide_streamlit_style = """
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
+# --- CONFIGURATION ---
+ADMIN_EMAIL = "kingtechnical421@gmail.com"
+SHARED_PASSCODE = "Madara786@@"
+# In-memory mock database for registered users and verified status
+if "registered_users" not in st.session_state:
+    st.session_state["registered_users"] = {} # format: {email: {"verified": bool, "code": str}}
+# ----------------------------------------------------
 
-# --- Passcode Protection Gate ---
-def check_password():
-    """Returns True if the user enters the correct passcode."""
-    
-    def password_entered():
-        # Passcode updated here
-        if st.session_state["password"] == "Madara786@@":
-            st.session_state["password_correct"] = True
-            del st.session_state["password"]
-        else:
-            st.session_state["password_correct"] = False
 
-    if "password_correct" not in st.session_state:
-        st.markdown("## 🔒 Restricted Access")
-        st.text_input("Enter Passcode to Unlock Bot", type="password", on_change=password_entered, key="password")
-        return False
-    elif not st.session_state["password_correct"]:
-        st.markdown("## 🔒 Restricted Access")
-        st.text_input("Enter Passcode to Unlock Bot", type="password", on_change=password_entered, key="password")
-        st.error("😕 Incorrect passcode. Please try again.")
-        return False
-    else:
+# --- Advanced Auth Gate ---
+def check_authentication():
+    if "auth_role" in st.session_state and st.session_state["auth_role"] is not None:
         return True
 
-if not check_password():
+    st.markdown("## 🔒 Bot Security Gateway")
+    
+    tab_user, tab_admin = st.tabs(["👤 User Portal (Email / Passcode)", "👑 Admin Portal"])
+
+    # Standard User Portal
+    with tab_user:
+        st.subheader("User Login")
+        user_email = st.text_input("Your Email Address", key="user_email_field")
+        user_pass = st.text_input("Passcode", type="password", key="user_pass_field")
+
+        # Initialize tracking states
+        if "pending_email" not in st.session_state:
+            st.session_state["pending_email"] = None
+
+        if st.button("Proceed to Login", type="primary", key="user_proceed_btn"):
+            if not user_email.strip() or not user_pass:
+                st.error("Please fill in both email and passcode.")
+            elif user_pass != SHARED_PASSCODE:
+                st.error("❌ Incorrect passcode.")
+            elif user_email.strip().lower() == ADMIN_EMAIL.lower():
+                st.warning("Please use the Admin Portal tab for Admin login.")
+            else:
+                clean_email = user_email.strip().lower()
+                users_db = st.session_state["registered_users"]
+
+                # Check if user is already verified
+                if clean_email in users_db and users_db[clean_email].get("verified", False):
+                    st.session_state["auth_role"] = "user"
+                    st.session_state["user_email"] = clean_email
+                    st.rerun()
+                else:
+                    # First time login: Generate 6-digit verification code
+                    gen_code = str(random.randint(100000, 999999))
+                    if clean_email not in users_db:
+                        users_db[clean_email] = {"verified": False}
+                    users_db[clean_email]["code"] = gen_code
+                    st.session_state["pending_email"] = clean_email
+                    
+                    # Simulated email dispatch notification
+                    st.info(f"📧 [Mock Email Service Sent to {clean_email}]: Your 6-digit verification code is **{gen_code}**")
+
+        # If verification code is pending for this user session
+        if st.session_state.get("pending_email"):
+            st.markdown("---")
+            st.write(f"Enter the 6-digit code sent to **{st.session_state['pending_email']}**:")
+            entered_code = st.text_input("6-Digit Verification Code", max_chars=6, key="verify_code_input")
+            if st.button("Verify & Login", type="primary", key="verify_btn"):
+                p_email = st.session_state["pending_email"]
+                saved_code = st.session_state["registered_users"].get(p_email, {}).get("code")
+                if entered_code.strip() == saved_code:
+                    st.session_state["registered_users"][p_email]["verified"] = True
+                    st.session_state["auth_role"] = "user"
+                    st.session_state["user_email"] = p_email
+                    st.session_state["pending_email"] = None
+                    st.success("Verification successful!")
+                    st.rerun()
+                else:
+                    st.error("❌ Invalid 6-digit verification code.")
+
+    # Admin Portal
+    with tab_admin:
+        st.subheader("Admin Login")
+        admin_email_input = st.text_input("Admin Email", key="admin_email_field")
+        admin_pass_input = st.text_input("Admin Password / Passcode", type="password", key="admin_pass_field")
+
+        if st.button("Login as Admin", type="primary", key="admin_login_btn"):
+            if admin_email_input.strip().lower() == ADMIN_EMAIL.lower() and admin_pass_input == SHARED_PASSCODE:
+                st.session_state["auth_role"] = "admin"
+                st.session_state["user_email"] = ADMIN_EMAIL
+                st.rerun()
+            else:
+                st.error("❌ Unauthorized: Invalid Admin credentials.")
+
+    return False
+
+if not check_authentication():
     st.stop()
 # -----------------------------------------------
 
-# Initialize session state for cancellation control
+# Session initialization
 if "stop_requested" not in st.session_state:
     st.session_state["stop_requested"] = False
+
+current_role = st.session_state.get("auth_role", "user")
 
 # Ensure local image cache folder exists
 os.makedirs("./images", exist_ok=True)
@@ -145,7 +211,6 @@ def human_bezier_mouse_move(driver):
 
 
 def calculate_organic_watch_time(video_length, is_extended_view):
-    """Calculates organic watch duration with randomized Gaussian variation and micro-jitter."""
     if is_extended_view:
         mean_pct = 1.15
         std_dev_pct = 0.08
@@ -266,6 +331,13 @@ def run_single_social_session(
 
 # --- Streamlit UI Layout ---
 st.title("🛡️ Social Media Organic Traffic Bot")
+
+logged_in_email = st.session_state.get("user_email", "")
+if current_role == "admin":
+    st.success(f"👑 Logged in as **Admin** ({logged_in_email})")
+else:
+    st.info(f"👤 Logged in as **User** ({logged_in_email})")
+
 st.markdown("### Anti-Detect Shielded Traffic & View Generator")
 st.write("Supports **YouTube Shorts**, **TikTok Reels**, and **Instagram Reels**.")
 
@@ -273,7 +345,14 @@ with st.sidebar:
     st.header("⚙️ Configuration")
     platform = st.selectbox("Select Platform", ["YouTube Shorts", "TikTok Reel", "Instagram Reel"])
     target_url = st.text_input("Target URL", placeholder="https://www.youtube.com/shorts/...")
-    total_views = st.number_input("Target Views Count", min_value=1, max_value=100, value=5)
+    
+    max_allowed_views = 100 if current_role == "admin" else 20
+    total_views = st.number_input(
+        f"Target Views Count (Max: {max_allowed_views})", 
+        min_value=1, 
+        max_value=max_allowed_views, 
+        value=min(5, max_allowed_views)
+    )
     
     st.markdown("---")
     st.header("🌐 Proxy Pool Options")
@@ -303,7 +382,13 @@ with st.sidebar:
     if stop_clicked:
         st.session_state["stop_requested"] = True
 
-# Main Dashboard layout & Thumbnail preview
+    st.markdown("---")
+    if st.button("🚪 Logout", use_container_width=True):
+        st.session_state["auth_role"] = None
+        st.session_state["user_email"] = None
+        st.rerun()
+
+# Dashboard View
 col1, col2, col3 = st.columns([1, 1, 1])
 with col1:
     views_metric = st.metric(label="Views Generated", value="0 / 0")
