@@ -46,7 +46,6 @@ import undetected_chromedriver as uc
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
 import urllib.request
-import json
 
 # Page Configuration
 st.set_page_config(
@@ -300,70 +299,26 @@ def extract_youtube_id(url):
 
 
 def fetch_video_metadata(url, platform):
-    """Robust extractor using yt-dlp first, backed up by direct page HTML parsing for TikTok/Insta/YT."""
-    meta = {"length": 30, "thumb": None}
-    
+    """Fetches thumbnail safely for preview display."""
+    meta = {"thumb": None}
     if platform == "YouTube Shorts":
         yt_id = extract_youtube_id(url)
         if yt_id:
             meta["thumb"] = f"https://img.youtube.com/vi/{yt_id}/hqdefault.jpg"
-
-    # Layer 1: Try yt-dlp extraction
-    extracted = False
+            
     try:
-        import yt_dlp
-        ydl_opts = {'quiet': True, 'no_warnings': True, 'skip_download': True}
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            if info:
-                if 'duration' in info and info['duration']:
-                    meta["length"] = int(info['duration'])
-                    extracted = True
-                if 'thumbnail' in info and info['thumbnail']:
-                    meta["thumb"] = info['thumbnail']
-    except Exception as e:
-        print(f"yt-dlp extraction note: {e}")
-
-    # Layer 2: Fallback HTML scraping for duration/thumbnail if yt-dlp was blocked or failed
-    if not extracted:
-        try:
-            req = urllib.request.Request(
-                url, 
-                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-            )
-            with urllib.request.urlopen(req, timeout=8) as response:
-                html = response.read().decode('utf-8', errors='ignore')
-                
-                # Search for duration in meta tags (e.g., og:video:duration or schema.org duration)
-                duration_match = re.search(r'property="og:video:duration"\s+content="(\d+)"', html)
-                if duration_match:
-                    meta["length"] = int(duration_match.group(1))
-                else:
-                    # Generic duration search in JSON-LD blocks
-                    json_dur = re.search(r'"duration"\s*:\s*"PT(\d+)(?:M(\d+))?(?:S(\d+))?"', html)
-                    if json_dur:
-                        mins = int(json_dur.group(1)) if json_dur.group(1) and 'M' in json_dur.group(0) else 0
-                        secs = int(json_dur.group(2) or json_dur.group(3) or 0)
-                        if mins > 0 or secs > 0:
-                            meta["length"] = (mins * 60) + secs
-
-                # Search for thumbnail if not found
-                if not meta["thumb"]:
-                    thumb_match = re.search(r'property="og:image"\s+content="([^"]+)"', html)
-                    if thumb_match:
-                        meta["thumb"] = thumb_match.group(1)
-        except Exception as html_err:
-            print(f"HTML fallback parsing note: {html_err}")
-
-    # Final platform-specific safe defaults if everything else fails
-    if meta["length"] <= 0:
-        if platform == "YouTube Shorts":
-            meta["length"] = 35
-        elif platform == "TikTok Reel":
-            meta["length"] = 25
-        else:
-            meta["length"] = 20
-
+        req = urllib.request.Request(
+            url, 
+            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        )
+        with urllib.request.urlopen(req, timeout=6) as response:
+            html = response.read().decode('utf-8', errors='ignore')
+            thumb_match = re.search(r'property="og:image"\s+content="([^"]+)"', html)
+            if thumb_match:
+                meta["thumb"] = thumb_match.group(1)
+    except Exception:
+        pass
+        
     return meta
 
 
@@ -381,23 +336,8 @@ def human_bezier_mouse_move(driver):
         pass
 
 
-def calculate_organic_watch_time(video_length, is_extended_view):
-    if is_extended_view:
-        mean_pct = 1.15
-        std_dev_pct = 0.08
-    else:
-        mean_pct = 0.65
-        std_dev_pct = 0.12
-
-    target_pct = random.gauss(mean_pct, std_dev_pct)
-    target_pct = max(0.35, min(target_pct, 1.45))
-
-    watch_time = (video_length * target_pct) + random.uniform(-2.0, 3.5)
-    return max(8, int(watch_time))
-
-
 def run_single_social_session(
-    session_id, target_url, platform, is_headless, is_extended_view, video_length, proxy_list, status_box, progress_bar
+    session_id, target_url, platform, is_headless, proxy_list, status_box, progress_bar
 ):
     driver = None
     profile_dir = os.path.abspath(f"./temp_profile_{session_id}_{random.randint(1000,9999)}")
@@ -457,18 +397,17 @@ def run_single_social_session(
             except Exception:
                 pass
 
-        total_watch_time = calculate_organic_watch_time(video_length, is_extended_view)
-        retention_pct = int((total_watch_time / video_length) * 100)
-        mode_tag = f"🔥 Retention ({retention_pct}%)" if is_extended_view else f"Standard ({retention_pct}%)"
+        # Random watch duration between 10 and 17 seconds per session
+        total_watch_time = random.randint(10, 17)
 
-        status_box.text(f"Session #{session_id} [{platform}] ({mode_tag}): Playing {total_watch_time}s...")
+        status_box.text(f"Session #{session_id} [{platform}]: Watching for {total_watch_time}s...")
 
         elapsed = 0
         while elapsed < total_watch_time:
             if st.session_state.get("stop_requested", False):
                 break
 
-            if elapsed % random.choice([2, 3, 4]) == 0:
+            if elapsed % 2 == 0:
                 human_bezier_mouse_move(driver)
                 driver.execute_script("window.dispatchEvent(new Event('mousemove'));")
 
@@ -477,7 +416,7 @@ def run_single_social_session(
             progress_val = min(1.0, elapsed / total_watch_time)
             progress_bar.progress(
                 progress_val,
-                text=f"Session #{session_id} | Elapsed: {elapsed}s / {total_watch_time}s ({mode_tag})"
+                text=f"Session #{session_id} | Elapsed: {elapsed}s / {total_watch_time}s"
             )
 
         return True
@@ -540,9 +479,9 @@ with st.sidebar:
         elif not validate_url_for_platform(target_url, platform):
             st.error(f"URL does not match selected platform: {platform}")
         else:
-            with st.spinner("Fetching accurate video details & true length..."):
+            with st.spinner("Fetching thumbnail..."):
                 st.session_state["fetched_metadata"] = fetch_video_metadata(target_url, platform)
-                st.success("✅ Video details & true length fetched successfully!")
+                st.success("✅ Thumbnail fetched successfully!")
 
     max_allowed_views = 500
     total_views = st.number_input(
@@ -595,7 +534,7 @@ with col2:
 with col3:
     meta = st.session_state.get("fetched_metadata")
     if meta and meta.get("thumb"):
-        st.image(meta["thumb"], width=130, caption=f"True Length: {meta['length']}s")
+        st.image(meta["thumb"], width=130, caption="Target Thumbnail")
     elif platform == "YouTube Shorts" and target_url:
         yt_id = extract_youtube_id(target_url)
         if yt_id:
@@ -615,16 +554,10 @@ if start_clicked:
     elif not validate_url_for_platform(target_url, platform):
         st.error(f"URL Mismatch Error! The URL does not match the selected platform: {platform}")
     else:
-        meta = st.session_state.get("fetched_metadata")
-        video_length = meta["length"] if meta else 25
-
         successful_views = 0
-        extended_count = int(total_views * 0.20)
-        extended_indices = set(random.sample(range(total_views), extended_count)) if total_views > 0 else set()
-
-        avg_view_duration = (video_length * 0.70) + 12
-        total_estimated_seconds = int(total_views * avg_view_duration)
         
+        # Average ~15 seconds per session (10-17 range)
+        total_estimated_seconds = int(total_views * 16)
         total_minutes = int(total_estimated_seconds / 60)
         if total_minutes >= 60:
             hours = round(total_minutes / 60, 1)
@@ -639,22 +572,18 @@ if start_clicked:
 
         st.success("🚀 **Order Submitted Successfully!** You can now safely leave this web page or shut down your device—the bot will continue processing your views in the background.")
 
-        status_box.warning(f"Running task for {platform} | Target: {total_views} views...")
+        status_box.warning(f"Running task for {platform} | Target: {total_views} views (10-17s watch times)...")
 
         for i in range(total_views):
             if st.session_state.get("stop_requested", False):
                 status_box.error("🛑 Task stopped by user.")
                 break
-
-            is_extended_view = (i in extended_indices)
             
             success = run_single_social_session(
                 session_id=i + 1,
                 target_url=target_url,
                 platform=platform,
                 is_headless=is_headless,
-                is_extended_view=is_extended_view,
-                video_length=video_length,
                 proxy_list=proxy_list,
                 status_box=status_box,
                 progress_bar=progress_bar
