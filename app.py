@@ -31,6 +31,7 @@ except (ImportError, ModuleNotFoundError):
 # ----------------------------------------------------
 
 import os
+import re
 import random
 import time
 import shutil
@@ -112,6 +113,19 @@ def validate_url_for_platform(url, platform):
     return False
 
 
+def extract_youtube_id(url):
+    """Extracts YouTube video ID from standard or shorts URLs."""
+    patterns = [
+        r'(?:v=|/v/|embed/|shorts/)([0-9A-Za-z_-]{11})',
+        r'(?:youtu\.be/)([0-9A-Za-z_-]{11})'
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1)
+    return None
+
+
 def human_bezier_mouse_move(driver):
     try:
         actions = ActionChains(driver)
@@ -142,11 +156,9 @@ def run_single_social_session(
         selected_ua = random.choice(USER_AGENTS)
         options.add_argument(f"--user-agent={selected_ua}")
 
-        # Pick a random proxy from the list for this specific session
         if proxy_list and len(proxy_list) > 0:
             chosen_proxy = random.choice(proxy_list).strip()
             if chosen_proxy:
-                # Format properly if http:// prefix is missing
                 if not chosen_proxy.startswith("http://") and not chosen_proxy.startswith("https://"):
                     chosen_proxy = f"http://{chosen_proxy}"
                 options.add_argument(f"--proxy-server={chosen_proxy}")
@@ -265,12 +277,17 @@ with st.sidebar:
     st.markdown("---")
     start_clicked = st.button("▶ Start Bot Task", type="primary", use_container_width=True)
 
-# Main Dashboard
-col1, col2 = st.columns(2)
+# Main Dashboard layout & Thumbnail preview
+col1, col2, col3 = st.columns([1, 1, 1])
 with col1:
     views_metric = st.metric(label="Views Generated", value="0 / 0")
 with col2:
     eta_metric = st.metric(label="Order ETA", value="--:--:--")
+with col3:
+    if platform == "YouTube Shorts" and target_url:
+        yt_id = extract_youtube_id(target_url)
+        if yt_id:
+            st.image(f"https://img.youtube.com/vi/{yt_id}/hqdefault.jpg", width=140, caption="Target Thumbnail")
 
 st.markdown("### 📊 Live Session Dashboard")
 status_box = st.empty()
