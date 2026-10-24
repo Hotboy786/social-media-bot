@@ -71,7 +71,7 @@ SHARED_PASSCODE = "Madara786@@"
 
 # Your Gmail SMTP Configuration
 SMTP_SENDER_EMAIL = "kingtechnical421@gmail.com"
-SMTP_APP_PASSWORD = "YOUR_16_CHAR_GMAIL_APP_PASSWORD" # Replace with your generated Google App Password
+SMTP_APP_PASSWORD = "bipnuhzbuakxihih" # Cleaned 16-character App Password
 
 if "registered_users" not in st.session_state:
     st.session_state["registered_users"] = {}
@@ -83,7 +83,7 @@ def send_verification_email(receiver_email, code):
     message = MIMEMultipart("alternative")
     message["Subject"] = "🔒 Your Social Media Bot Verification Code"
     
-    # Format 'From' display name as Madara Uchiha
+    # Display name formatted as Madara Uchiha
     message["From"] = formataddr((str(Header("Madara Uchiha", "utf-8")), SMTP_SENDER_EMAIL))
     message["To"] = receiver_email
 
@@ -156,7 +156,7 @@ def check_authentication():
                     users_db[clean_email]["code"] = gen_code
                     st.session_state["pending_email"] = clean_email
                     
-                    with st.spinner("Sending verification email from Madara Uchiha..."):
+                    with st.spinner("Sending verification email..."):
                         success = send_verification_email(clean_email, gen_code)
                         if success:
                             st.success(f"📧 A 6-digit verification code from **Madara Uchiha** has been sent to **{clean_email}**. Check your inbox/spam folder.")
