@@ -520,7 +520,7 @@ col1, col2, col3 = st.columns([1, 1, 1])
 with col1:
     views_metric = st.metric(label="Views Generated", value="0 / 0")
 with col2:
-    eta_metric = st.metric(label="Order ETA", value="--:--:--")
+    eta_metric = st.metric(label="Order ETA", value="~0 min")
 with col3:
     if platform == "YouTube Shorts" and target_url:
         yt_id = extract_youtube_id(target_url)
@@ -552,11 +552,24 @@ if start_clicked:
         extended_count = int(total_views * 0.20)
         extended_indices = set(random.sample(range(total_views), extended_count)) if total_views > 0 else set()
 
-        avg_view_duration = (video_length * 0.70) + 8
+        # Calculate ETA in hours/minutes duration format (e.g. ~1 hour, ~2 hours)
+        avg_view_duration = (video_length * 0.70) + 12
         total_estimated_seconds = int(total_views * avg_view_duration)
-        completion_timestamp = time.time() + total_estimated_seconds
-        completion_time_str = time.strftime("%I:%M:%S %p", time.localtime(completion_timestamp))
-        eta_metric.metric(label="Order ETA", value=completion_time_str)
+        
+        total_minutes = int(total_estimated_seconds / 60)
+        if total_minutes >= 60:
+            hours = round(total_minutes / 60, 1)
+            if hours.is_integer():
+                eta_str = f"~{int(hours)} hour{'s' if int(hours) > 1 else ''}"
+            else:
+                eta_str = f"~{hours} hours"
+        else:
+            eta_str = f"~{max(1, total_minutes)} min"
+
+        eta_metric.metric(label="Order ETA", value=eta_str)
+
+        # Notification informing users they can close the web or shut down their device
+        st.success("🚀 **Order Submitted Successfully!** You can now safely leave this web page or shut down your device—the bot will continue processing your views in the background.")
 
         status_box.warning(f"Running task for {platform} | Target: {total_views} views...")
 
