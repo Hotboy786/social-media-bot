@@ -65,10 +65,9 @@ def check_password():
     """Returns True if the user enters the correct passcode."""
     
     def password_entered():
-        # Change 'mysecret123' to whatever passcode you want!
-        if st.session_state["password"] == "123":
+        if st.session_state["password"] == "mysecret123":
             st.session_state["password_correct"] = True
-            del st.session_state["password"]  # clear passcode from session state
+            del st.session_state["password"]
         else:
             st.session_state["password_correct"] = False
 
@@ -84,7 +83,6 @@ def check_password():
     else:
         return True
 
-# Stop execution of the rest of the app if password is incorrect
 if not check_password():
     st.stop()
 # -----------------------------------------------
@@ -100,12 +98,10 @@ USER_AGENTS = [
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
 ]
 
-# Neutralize undetected-chromedriver's garbage collection destructor warning
 uc.Chrome.__del__ = lambda self: None
 
 
 def validate_url_for_platform(url, platform):
-    """Strictly validates if the URL matches the selected platform."""
     url = url.lower()
     if platform == "YouTube Shorts":
         return "youtube.com" in url or "youtu.be" in url
@@ -117,7 +113,6 @@ def validate_url_for_platform(url, platform):
 
 
 def human_bezier_mouse_move(driver):
-    """Simulates natural human mouse movement using micro-steps."""
     try:
         actions = ActionChains(driver)
         steps = random.randint(5, 9)
@@ -132,9 +127,8 @@ def human_bezier_mouse_move(driver):
 
 
 def run_single_social_session(
-    session_id, target_url, platform, is_headless, is_extended_view, video_length, proxy_str, status_box, progress_bar
+    session_id, target_url, platform, is_headless, is_extended_view, video_length, proxy_list, status_box, progress_bar
 ):
-    """Executes a single view session with WAF bypasses, isolated profile directory, and optional proxy."""
     driver = None
     profile_dir = os.path.abspath(f"./temp_profile_{session_id}_{random.randint(1000,9999)}")
     try:
@@ -148,9 +142,14 @@ def run_single_social_session(
         selected_ua = random.choice(USER_AGENTS)
         options.add_argument(f"--user-agent={selected_ua}")
 
-        # Optional Proxy Integration
-        if proxy_str and proxy_str.strip():
-            options.add_argument(f"--proxy-server={proxy_str.strip()}")
+        # Pick a random proxy from the list for this specific session
+        if proxy_list and len(proxy_list) > 0:
+            chosen_proxy = random.choice(proxy_list).strip()
+            if chosen_proxy:
+                # Format properly if http:// prefix is missing
+                if not chosen_proxy.startswith("http://") and not chosen_proxy.startswith("https://"):
+                    chosen_proxy = f"http://{chosen_proxy}"
+                options.add_argument(f"--proxy-server={chosen_proxy}")
 
         if is_headless:
             options.add_argument("--headless=new")
@@ -160,10 +159,7 @@ def run_single_social_session(
         driver = uc.Chrome(options=options, version_main=155, use_subprocess=True)
         driver.set_page_load_timeout(30)
 
-        # 1. Bypass DOM/JS Inspection
         driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-        
-        # 2. Force Tab Focus & Visibility
         driver.execute_script("""
             Object.defineProperty(document, 'hidden', {get: () => false});
             Object.defineProperty(document, 'visibilityState', {get: () => 'visible'});
@@ -230,7 +226,6 @@ def run_single_social_session(
             except Exception:
                 pass
             driver = None
-        # Clean up temporary session directory
         try:
             if os.path.exists(profile_dir):
                 shutil.rmtree(profile_dir, ignore_errors=True)
@@ -250,12 +245,20 @@ with st.sidebar:
     total_views = st.number_input("Target Views Count", min_value=1, max_value=100, value=5)
     
     st.markdown("---")
-    st.header("🌐 Proxy Options (Optional)")
-    use_proxy = st.checkbox("Enable Residential Proxy", value=False)
-    proxy_str = ""
+    st.header("🌐 Proxy Pool Options")
+    use_proxy = st.checkbox("Enable Proxy Pool", value=False)
+    proxy_input = ""
+    proxy_list = []
+    
     if use_proxy:
-        proxy_str = st.text_input("Proxy Server", placeholder="http://ip:port or http://user:pass@ip:port")
-        st.caption("Leave empty if you want to run direct without proxies.")
+        proxy_input = st.text_area(
+            "Proxy List (One per line)", 
+            placeholder="192.168.1.1:8080\nusername:password@192.168.1.2:8080",
+            help="Paste your list of proxies here. A random proxy will be picked for each view session."
+        )
+        if proxy_input:
+            proxy_list = [line.strip() for line in proxy_input.split("\n") if line.strip()]
+        st.caption(f"Loaded proxies in pool: {len(proxy_list)}")
 
     is_headless = st.checkbox("Run in Background (Headless)", value=True)
     
@@ -292,7 +295,6 @@ if start_clicked:
         extended_count = int(total_views * 0.20)
         extended_indices = set(random.sample(range(total_views), extended_count)) if total_views > 0 else set()
 
-        # ETA Calculation
         avg_view_duration = (video_length * 0.70) + 8
         total_estimated_seconds = int(total_views * avg_view_duration)
         completion_timestamp = time.time() + total_estimated_seconds
@@ -311,7 +313,7 @@ if start_clicked:
                 is_headless=is_headless,
                 is_extended_view=is_extended_view,
                 video_length=video_length,
-                proxy_str=proxy_str,
+                proxy_list=proxy_list,
                 status_box=status_box,
                 progress_bar=progress_bar
             )
