@@ -67,7 +67,7 @@ st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 # --- CONFIGURATION ---
 ADMIN_EMAIL = "kingtechnical421@gmail.com"
-SHARED_PASSCODE = "Madara786@@"
+ADMIN_PASSCODE = "Madara786@@"
 
 # Your Gmail SMTP Configuration
 SMTP_SENDER_EMAIL = "kingtechnical421@gmail.com"
@@ -86,7 +86,7 @@ def send_verification_email(receiver_email, code):
     message["From"] = formataddr((str(Header("Madara Uchiha", "utf-8")), SMTP_SENDER_EMAIL))
     message["To"] = receiver_email
 
-    text_content = f"Hello,\n\nMadara Uchiha sent you a 6-digit verification code: {code}\n\nEnter this code on the login page to access your bot session."
+    text_content = f"Hello,\n\nMadara Uchiha sent you a 6-digit verification code: {code}\n\nEnter this code on the registration page to verify your email."
     html_content = f"""
     <html>
       <body>
@@ -95,7 +95,7 @@ def send_verification_email(receiver_email, code):
           <p>Hello,</p>
           <p><strong>Madara Uchiha</strong> sent you a 6-digit verification code:</p>
           <h1 style="background: #f0f2f6; padding: 10px; text-align: center; letter-spacing: 5px; color: #31333f;">{code}</h1>
-          <p>Please enter this code in the login portal to complete your verification.</p>
+          <p>Please enter this code in the portal to verify your email address.</p>
         </div>
       </body>
     </html>
@@ -115,73 +115,126 @@ def send_verification_email(receiver_email, code):
         return False
 
 
-# --- Permanent Auth Gate (No Time Restrictions) ---
+# --- Authentication Gate ---
 def check_authentication():
-    # Both Admin and Users stay logged in permanently until they log out
     if st.session_state.get("auth_role") in ["admin", "user"]:
         return True
 
     st.markdown("## 🔒 Bot Security Gateway")
     
-    tab_user, tab_admin = st.tabs(["👤 User Portal (Email / Passcode)", "👑 Admin Portal"])
+    tab_user, tab_admin = st.tabs(["👤 User Portal", "👑 Admin Portal"])
 
     # Standard User Portal
     with tab_user:
-        st.subheader("User Login")
-        user_email = st.text_input("Your Email Address", key="user_email_field")
-        user_pass = st.text_input("Passcode", type="password", key="user_pass_field")
+        st.subheader("User Portal")
+        
+        # Initialize state flow trackers
+        if "user_flow_step" not in st.session_state:
+            st.session_state["user_flow_step"] = "input_email" # input_email -> verify_code -> set_passcode -> login
+        if "flow_email" not in st.session_state:
+            st.session_state["flow_email"] = ""
 
-        if "pending_email" not in st.session_state:
-            st.session_state["pending_email"] = None
+        users_db = st.session_state["registered_users"]
 
-        if st.button("Proceed to Login", type="primary", key="user_proceed_btn"):
-            if not user_email.strip() or not user_pass:
-                st.error("Please fill in both email and passcode.")
-            elif user_pass != SHARED_PASSCODE:
-                st.error("❌ Incorrect passcode.")
-            elif user_email.strip().lower() == ADMIN_EMAIL.lower():
-                st.warning("Please use the Admin Portal tab for Admin login.")
-            else:
-                clean_email = user_email.strip().lower()
-                users_db = st.session_state["registered_users"]
-
-                # If user already verified before, log them in instantly with just email/passcode
-                if clean_email in users_db and users_db[clean_email].get("verified", False):
-                    st.session_state["auth_role"] = "user"
-                    st.session_state["user_email"] = clean_email
-                    st.success("✅ Welcome back! Login successful.")
-                    st.rerun()
+        # Step A: Input Email
+        if st.session_state["user_flow_step"] == "input_email":
+            email_input = st.text_input("Enter Your Email Address", key="portal_email_input")
+            
+            if st.button("Continue", type="primary", key="portal_continue_btn"):
+                if not email_input.strip():
+                    st.error("Please enter your email address.")
+                elif email_input.strip().lower() == ADMIN_EMAIL.lower():
+                    st.warning("Please use the Admin Portal tab for Admin login.")
                 else:
-                    # First-time verification code send
-                    gen_code = str(random.randint(100000, 999999))
-                    if clean_email not in users_db:
-                        users_db[clean_email] = {}
-                    users_db[clean_email]["code"] = gen_code
-                    st.session_state["pending_email"] = clean_email
+                    clean_email = email_input.strip().lower()
+                    st.session_state["flow_email"] = clean_email
+
+                    if clean_email in users_db and users_db[clean_email].get("registered", False):
+                        # User ALREADY registered before -> Jump straight to password login!
+                        st.session_state["user_flow_step"] = "login"
+                        st.rerun()
+                    else:
+                        # First time user -> Send 6-digit verification code
+                        gen_code = str(random.randint(100000, 999999))
+                        if clean_email not in users_db:
+                            users_db[clean_email] = {}
+                        users_db[clean_email]["code"] = gen_code
+                        
+                        with st.spinner("Sending 6-digit verification code..."):
+                            success = send_verification_email(clean_email, gen_code)
+                            if success:
+                                st.session_state["user_flow_step"] = "verify_code"
+                                st.success(f"📧 Verification code sent from **Madara Uchiha** to **{clean_email}**. Check your inbox/spam.")
+                                st.rerun()
+                            else:
+                                st.error("❌ Failed to send email. Check your SMTP settings.")
+
+        # Step B: Verify 6-Digit Code (One-Time)
+        elif st.session_state["user_flow_step"] == "verify_code":
+            st.info(f"Verifying email: **{st.session_state['flow_email']}**")
+            entered_code = st.text_input("Enter 6-Digit Verification Code", max_chars=6, key="portal_verify_input")
+            
+            col_v1, col_v2 = st.columns(2)
+            with col_v1:
+                if st.button("Verify Code", type="primary", key="portal_verify_btn"):
+                    target_email = st.session_state["flow_email"]
+                    saved_code = users_db.get(target_email, {}).get("code")
+                    if entered_code.strip() == saved_code:
+                        st.session_state["user_flow_step"] = "set_passcode"
+                        st.success("✅ Email verified successfully! Now set your personal passcode.")
+                        st.rerun()
+                    else:
+                        st.error("❌ Invalid 6-digit verification code.")
+            with col_v2:
+                if st.button("Back / Change Email", key="portal_back_email"):
+                    st.session_state["user_flow_step"] = "input_email"
+                    st.rerun()
+
+        # Step C: Set Custom Passcode (One-Time)
+        elif st.session_state["user_flow_step"] == "set_passcode":
+            st.info(f"Set a personal passcode for **{st.session_state['flow_email']}** (You will use this to log in hereafter).")
+            new_pass = st.text_input("Create Passcode", type="password", key="portal_new_pass")
+            confirm_pass = st.text_input("Confirm Passcode", type="password", key="portal_confirm_pass")
+
+            if st.button("Save Passcode & Complete Registration", type="primary", key="portal_save_pass_btn"):
+                if not new_pass or not confirm_pass:
+                    st.error("Please fill in both fields.")
+                elif new_pass != confirm_pass:
+                    st.error("❌ Passcodes do not match.")
+                else:
+                    target_email = st.session_state["flow_email"]
+                    users_db[target_email]["passcode"] = new_pass
+                    users_db[target_email]["registered"] = True
                     
-                    with st.spinner("Sending first-time verification email..."):
-                        success = send_verification_email(clean_email, gen_code)
-                        if success:
-                            st.success(f"📧 First-time verification code sent from **Madara Uchiha** to **{clean_email}**. Check your inbox/spam folder.")
-                        else:
-                            st.error("❌ Failed to send email. Please check your Gmail App Password configuration.")
-
-        if st.session_state.get("pending_email"):
-            st.markdown("---")
-            st.write(f"Enter the 6-digit code sent to **{st.session_state['pending_email']}** (Required only for first-time login):")
-            entered_code = st.text_input("6-Digit Verification Code", max_chars=6, key="verify_code_input")
-            if st.button("Verify & Complete Registration", type="primary", key="verify_btn"):
-                p_email = st.session_state["pending_email"]
-                saved_code = st.session_state["registered_users"].get(p_email, {}).get("code")
-                if entered_code.strip() == saved_code:
-                    st.session_state["registered_users"][p_email]["verified"] = True
+                    # Log them in right away
                     st.session_state["auth_role"] = "user"
-                    st.session_state["user_email"] = p_email
-                    st.session_state["pending_email"] = None
-                    st.success("First-time verification successful! You are now logged in.")
+                    st.session_state["user_email"] = target_email
+                    st.session_state["user_flow_step"] = "input_email" # reset flow
+                    st.success("🎉 Registration complete! You are now logged in.")
                     st.rerun()
-                else:
-                    st.error("❌ Invalid 6-digit verification code.")
+
+        # Step D: Regular Login (Email + Personal Passcode)
+        elif st.session_state["user_flow_step"] == "login":
+            st.info(f"Welcome back, **{st.session_state['flow_email']}**! Enter your custom passcode to log in.")
+            login_pass = st.text_input("Your Passcode", type="password", key="portal_login_pass")
+
+            col_l1, col_l2 = st.columns(2)
+            with col_l1:
+                if st.button("Login", type="primary", key="portal_login_btn"):
+                    target_email = st.session_state["flow_email"]
+                    saved_pass = users_db.get(target_email, {}).get("passcode")
+                    if login_pass == saved_pass:
+                        st.session_state["auth_role"] = "user"
+                        st.session_state["user_email"] = target_email
+                        st.session_state["user_flow_step"] = "input_email"
+                        st.success("✅ Login successful!")
+                        st.rerun()
+                    else:
+                        st.error("❌ Incorrect passcode.")
+            with col_l2:
+                if st.button("Use Different Email", key="portal_change_email_login"):
+                    st.session_state["user_flow_step"] = "input_email"
+                    st.rerun()
 
     # Admin Portal
     with tab_admin:
@@ -190,7 +243,7 @@ def check_authentication():
         admin_pass_input = st.text_input("Admin Password / Passcode", type="password", key="admin_pass_field")
 
         if st.button("Login as Admin", type="primary", key="admin_login_btn"):
-            if admin_email_input.strip().lower() == ADMIN_EMAIL.lower() and admin_pass_input == SHARED_PASSCODE:
+            if admin_email_input.strip().lower() == ADMIN_EMAIL.lower() and admin_pass_input == ADMIN_PASSCODE:
                 st.session_state["auth_role"] = "admin"
                 st.session_state["user_email"] = ADMIN_EMAIL
                 st.rerun()
@@ -220,7 +273,7 @@ USER_AGENTS = [
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
 ]
 
-uc.Chrome.__del__ = lambda self: None
+uc.Chrome.__del> = lambda self: None
 
 
 def validate_url_for_platform(url, platform):
@@ -404,7 +457,7 @@ with st.sidebar:
     if st.session_state["show_share_box"]:
         st.markdown("**Copy your bot link below to share:**")
         st.code("https://social-media-bot.streamlit.app", language="text")
-        st.caption("Tell your friends to open this link, go to the **User Portal**, enter their email & passcode (`Madara786@@`), and verify with the 6-digit code sent by Madara Uchiha!")
+        st.caption("Tell your friends to open this link, enter their email, verify with the 6-digit code sent by Madara Uchiha, and create their own personal passcode!")
         
     st.markdown("---")
 
