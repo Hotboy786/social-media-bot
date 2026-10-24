@@ -393,6 +393,21 @@ st.write("Supports **YouTube Shorts**, **TikTok Reels**, and **Instagram Reels**
 
 with st.sidebar:
     st.header("⚙️ Configuration")
+    
+    # --- Share Button & Link Generator Feature ---
+    if "show_share_box" not in st.session_state:
+        st.session_state["show_share_box"] = False
+
+    if st.button("🔗 Share Bot Link", use_container_width=True):
+        st.session_state["show_share_box"] = not st.session_state["show_share_box"]
+
+    if st.session_state["show_share_box"]:
+        st.markdown("**Copy your bot link below to share:**")
+        st.code("https://social-media-bot.streamlit.app", language="text")
+        st.caption("Tell your friends to open this link, go to the **User Portal**, enter their email & passcode (`Madara786@@`), and verify with the 6-digit code sent by Madara Uchiha!")
+        
+    st.markdown("---")
+
     platform = st.selectbox("Select Platform", ["YouTube Shorts", "TikTok Reel", "Instagram Reel"])
     target_url = st.text_input("Target URL", placeholder="https://www.youtube.com/shorts/...")
     
