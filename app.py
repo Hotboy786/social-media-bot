@@ -47,6 +47,48 @@ st.set_page_config(
     layout="centered"
 )
 
+# --- Hide Streamlit Header, Footer, and Share/Deploy Toolbar via CSS ---
+hide_streamlit_style = """
+    <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    .stDeployButton {display: none;}
+    [data-testid="stToolbar"] {visibility: hidden; display: none;}
+    </style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
+
+# --- Passcode Protection Gate ---
+def check_password():
+    """Returns True if the user enters the correct passcode."""
+    
+    def password_entered():
+        # Change 'mysecret123' to whatever passcode you want!
+        if st.session_state["password"] == "123":
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]  # clear passcode from session state
+        else:
+            st.session_state["password_correct"] = False
+
+    if "password_correct" not in st.session_state:
+        st.markdown("## 🔒 Restricted Access")
+        st.text_input("Enter Passcode to Unlock Bot", type="password", on_change=password_entered, key="password")
+        return False
+    elif not st.session_state["password_correct"]:
+        st.markdown("## 🔒 Restricted Access")
+        st.text_input("Enter Passcode to Unlock Bot", type="password", on_change=password_entered, key="password")
+        st.error("😕 Incorrect passcode. Please try again.")
+        return False
+    else:
+        return True
+
+# Stop execution of the rest of the app if password is incorrect
+if not check_password():
+    st.stop()
+# -----------------------------------------------
+
 # Ensure local image cache folder exists
 os.makedirs("./images", exist_ok=True)
 
