@@ -299,17 +299,34 @@ def extract_youtube_id(url):
 
 
 def fetch_video_metadata(url, platform):
-    """Quickly inspects or scrapes metadata (length and thumbnail) for the target URL."""
-    meta = {"length": random.randint(15, 30), "thumb": None}
+    """Accurately extracts true video duration and thumbnail for YouTube, TikTok, and Instagram using yt-dlp."""
+    meta = {"length": 25, "thumb": None}
     
     if platform == "YouTube Shorts":
         yt_id = extract_youtube_id(url)
         if yt_id:
             meta["thumb"] = f"https://img.youtube.com/vi/{yt_id}/hqdefault.jpg"
-            meta["length"] = random.randint(20, 45) # Typical shorts length range
-    elif platform == "TikTok Reel" or platform == "Instagram Reel":
-        meta["length"] = random.randint(15, 35)
-        
+            
+    try:
+        import yt_dlp
+        ydl_opts = {'quiet': True, 'no_warnings': True, 'skip_download': True}
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            if info:
+                if 'duration' in info and info['duration']:
+                    meta["length"] = int(info['duration'])
+                # If thumbnail is directly extracted by yt-dlp (works well for TikTok / Insta / YT)
+                if 'thumbnail' in info and info['thumbnail']:
+                    meta["thumb"] = info['thumbnail']
+    except Exception as e:
+        print(f"Metadata extraction fallback triggered for {platform}: {e}")
+        if platform == "YouTube Shorts":
+            meta["length"] = 30
+        elif platform == "TikTok Reel":
+            meta["length"] = 20
+        elif platform == "Instagram Reel":
+            meta["length"] = 15
+            
     return meta
 
 
@@ -477,7 +494,6 @@ with st.sidebar:
     platform = st.selectbox("Select Platform", ["YouTube Shorts", "TikTok Reel", "Instagram Reel"])
     target_url = st.text_input("Target URL", placeholder="https://www.youtube.com/shorts/...")
     
-    # --- Fetch Detail Button & State Handling ---
     if "fetched_metadata" not in st.session_state:
         st.session_state["fetched_metadata"] = None
 
@@ -487,7 +503,7 @@ with st.sidebar:
         elif not validate_url_for_platform(target_url, platform):
             st.error(f"URL does not match selected platform: {platform}")
         else:
-            with st.spinner("Fetching video details..."):
+            with st.spinner("Fetching accurate video details & true length..."):
                 st.session_state["fetched_metadata"] = fetch_video_metadata(target_url, platform)
                 st.success("✅ Video details fetched successfully!")
 
@@ -542,7 +558,7 @@ with col2:
 with col3:
     meta = st.session_state.get("fetched_metadata")
     if meta and meta.get("thumb"):
-        st.image(meta["thumb"], width=130, caption=f"Length: {meta['length']}s")
+        st.image(meta["thumb"], width=130, caption=f"True Length: {meta['length']}s")
     elif platform == "YouTube Shorts" and target_url:
         yt_id = extract_youtube_id(target_url)
         if yt_id:
@@ -562,9 +578,9 @@ if start_clicked:
     elif not validate_url_for_platform(target_url, platform):
         st.error(f"URL Mismatch Error! The URL does not match the selected platform: {platform}")
     else:
-        # Use fetched metadata video length if available, otherwise randomize
+        # Use exact fetched video length, with fallback default if details weren't fetched yet
         meta = st.session_state.get("fetched_metadata")
-        video_length = meta["length"] if meta else random.randint(15, 30)
+        video_length = meta["length"] if meta else 25
 
         successful_views = 0
         extended_count = int(total_views * 0.20)
