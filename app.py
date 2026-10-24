@@ -71,7 +71,7 @@ SHARED_PASSCODE = "Madara786@@"
 
 # Your Gmail SMTP Configuration
 SMTP_SENDER_EMAIL = "kingtechnical421@gmail.com"
-SMTP_APP_PASSWORD = "bipnuhzbuakxihih" # Cleaned 16-character App Password
+SMTP_APP_PASSWORD = "bipnuhzbuakxihih"
 
 if "registered_users" not in st.session_state:
     st.session_state["registered_users"] = {}
@@ -83,7 +83,6 @@ def send_verification_email(receiver_email, code):
     message = MIMEMultipart("alternative")
     message["Subject"] = "🔒 Your Social Media Bot Verification Code"
     
-    # Display name formatted as Madara Uchiha
     message["From"] = formataddr((str(Header("Madara Uchiha", "utf-8")), SMTP_SENDER_EMAIL))
     message["To"] = receiver_email
 
@@ -116,9 +115,10 @@ def send_verification_email(receiver_email, code):
         return False
 
 
-# --- Advanced Auth Gate ---
+# --- Permanent Auth Gate (No Time Restrictions) ---
 def check_authentication():
-    if "auth_role" in st.session_state and st.session_state["auth_role"] is not None:
+    # Both Admin and Users stay logged in permanently until they log out
+    if st.session_state.get("auth_role") in ["admin", "user"]:
         return True
 
     st.markdown("## 🔒 Bot Security Gateway")
@@ -145,29 +145,32 @@ def check_authentication():
                 clean_email = user_email.strip().lower()
                 users_db = st.session_state["registered_users"]
 
+                # If user already verified before, log them in instantly with just email/passcode
                 if clean_email in users_db and users_db[clean_email].get("verified", False):
                     st.session_state["auth_role"] = "user"
                     st.session_state["user_email"] = clean_email
+                    st.success("✅ Welcome back! Login successful.")
                     st.rerun()
                 else:
+                    # First-time verification code send
                     gen_code = str(random.randint(100000, 999999))
                     if clean_email not in users_db:
-                        users_db[clean_email] = {"verified": False}
+                        users_db[clean_email] = {}
                     users_db[clean_email]["code"] = gen_code
                     st.session_state["pending_email"] = clean_email
                     
-                    with st.spinner("Sending verification email..."):
+                    with st.spinner("Sending first-time verification email..."):
                         success = send_verification_email(clean_email, gen_code)
                         if success:
-                            st.success(f"📧 A 6-digit verification code from **Madara Uchiha** has been sent to **{clean_email}**. Check your inbox/spam folder.")
+                            st.success(f"📧 First-time verification code sent from **Madara Uchiha** to **{clean_email}**. Check your inbox/spam folder.")
                         else:
                             st.error("❌ Failed to send email. Please check your Gmail App Password configuration.")
 
         if st.session_state.get("pending_email"):
             st.markdown("---")
-            st.write(f"Enter the 6-digit code sent to **{st.session_state['pending_email']}**:")
+            st.write(f"Enter the 6-digit code sent to **{st.session_state['pending_email']}** (Required only for first-time login):")
             entered_code = st.text_input("6-Digit Verification Code", max_chars=6, key="verify_code_input")
-            if st.button("Verify & Login", type="primary", key="verify_btn"):
+            if st.button("Verify & Complete Registration", type="primary", key="verify_btn"):
                 p_email = st.session_state["pending_email"]
                 saved_code = st.session_state["registered_users"].get(p_email, {}).get("code")
                 if entered_code.strip() == saved_code:
@@ -175,7 +178,7 @@ def check_authentication():
                     st.session_state["auth_role"] = "user"
                     st.session_state["user_email"] = p_email
                     st.session_state["pending_email"] = None
-                    st.success("Verification successful!")
+                    st.success("First-time verification successful! You are now logged in.")
                     st.rerun()
                 else:
                     st.error("❌ Invalid 6-digit verification code.")
@@ -393,7 +396,6 @@ with st.sidebar:
     platform = st.selectbox("Select Platform", ["YouTube Shorts", "TikTok Reel", "Instagram Reel"])
     target_url = st.text_input("Target URL", placeholder="https://www.youtube.com/shorts/...")
     
-    # Limitations removed: Set a high view cap (e.g., 500 views) for everyone
     max_allowed_views = 500
     total_views = st.number_input(
         f"Target Views Count (Max: {max_allowed_views})", 
