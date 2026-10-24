@@ -393,12 +393,13 @@ with st.sidebar:
     platform = st.selectbox("Select Platform", ["YouTube Shorts", "TikTok Reel", "Instagram Reel"])
     target_url = st.text_input("Target URL", placeholder="https://www.youtube.com/shorts/...")
     
-    max_allowed_views = 100 if current_role == "admin" else 20
+    # Limitations removed: Set a high view cap (e.g., 500 views) for everyone
+    max_allowed_views = 500
     total_views = st.number_input(
         f"Target Views Count (Max: {max_allowed_views})", 
         min_value=1, 
         max_value=max_allowed_views, 
-        value=min(5, max_allowed_views)
+        value=10
     )
     
     st.markdown("---")
