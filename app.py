@@ -220,15 +220,6 @@ with st.sidebar:
     st.markdown("---")
     start_clicked = st.button("▶ Start Bot Task", type="primary", use_container_width=True)
 
-    # --- Share This Bot Section ---
-    st.markdown("---")
-    st.header("📤 Share This Bot")
-    st.markdown("Share this live web tool with your friends or community:")
-    
-    live_app_url = "https://social-media-bot.streamlit.app"
-    st.text_input("App Link", value=live_app_url, key="share_link")
-    st.caption("Copy the link above to share anywhere!")
-
 # Main Dashboard
 col1, col2 = st.columns(2)
 with col1:
@@ -266,7 +257,7 @@ if start_clicked:
         completion_time_str = time.strftime("%I:%M:%S %p", time.localtime(completion_timestamp))
         eta_metric.metric(label="Order ETA", value=completion_time_str)
 
-        status_box.warning(f"Running task for platform | Target: {total_views} views...")
+        status_box.warning(f"Running task for {platform} | Target: {total_views} views...")
 
         for i in range(total_views):
             is_extended_view = (i in extended_indices)
