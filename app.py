@@ -37,6 +37,7 @@ import time
 import shutil
 import smtplib
 import ssl
+from datetime import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.header import Header
@@ -76,6 +77,9 @@ SMTP_APP_PASSWORD = "bipnuhzbuakxihih"
 
 if "registered_users" not in st.session_state:
     st.session_state["registered_users"] = {}
+
+if "order_history" not in st.session_state:
+    st.session_state["order_history"] = []
 # ----------------------------------------------------
 
 
@@ -262,6 +266,7 @@ if "stop_requested" not in st.session_state:
     st.session_state["stop_requested"] = False
 
 current_role = st.session_state.get("auth_role", "user")
+logged_in_email = st.session_state.get("user_email", "")
 
 os.makedirs("./images", exist_ok=True)
 
@@ -439,7 +444,6 @@ def run_single_social_session(
 # --- Streamlit UI Layout ---
 st.title("🛡️ Social Media Organic Traffic Bot")
 
-logged_in_email = st.session_state.get("user_email", "")
 if current_role == "admin":
     st.success(f"👑 Logged in as **Admin** ({logged_in_email})")
 else:
@@ -522,7 +526,7 @@ with st.sidebar:
         st.session_state["user_email"] = None
         st.rerun()
 
-# Dashboard View
+# Dashboard View Layout
 col1, col2, col3 = st.columns([1, 1, 1])
 with col1:
     views_metric_placeholder = st.empty()
@@ -543,6 +547,22 @@ st.markdown("### 📊 Live Session Dashboard")
 status_box = st.empty()
 status_box.info("Status: Ready to initialize tasks.")
 progress_bar = st.progress(0, text="Progress: Waiting for initiation...")
+
+# --- Order & View History Section ---
+st.markdown("---")
+st.markdown("### 📜 Order & View History Ledger")
+if st.session_state["order_history"]:
+    # Display table/list of previous orders
+    for idx, order in enumerate(reversed(st.session_state["order_history"])):
+        with st.expander(f"Order #{len(st.session_state['order_history']) - idx} | {order['platform']} - {order['timestamp']} ({order['user']})"):
+            st.write(f"🔗 **Target URL:** {order['url']}")
+            st.markdown(f"""
+            * **Requested Views:** `{order['requested']}`
+            * **Generated Views:** `{order['generated']}`
+            * **Success Rate:** `{(order['generated'] / order['requested']) * 100:.1f}%` if order['requested'] > 0 else `0%`
+            """)
+else:
+    st.info("No orders placed yet in this session. Start a task to record history.")
 
 # Execution Trigger
 if start_clicked:
@@ -598,6 +618,18 @@ if start_clicked:
                 status_box.text(f"Transitioning: Next session in {organic_delay:.1f}s...")
                 time.sleep(organic_delay)
 
+        # Log order details into history ledger upon completion or cancellation
+        order_record = {
+            "timestamp": datetime.now().strftime("%Y-%m-%d %I:%M:%S %p"),
+            "user": logged_in_email,
+            "platform": platform,
+            "url": target_url,
+            "requested": total_views,
+            "generated": successful_views
+        }
+        st.session_state["order_history"].append(order_record)
+
         if not st.session_state.get("stop_requested", False):
             status_box.success(f"Task completed successfully! Generated {successful_views}/{total_views} views.")
             st.balloons()
+            st.rerun()
