@@ -1,6 +1,2 @@
-streamlit
-undetected-chromedriver
-selenium
-requests
-Pillow
-setuptools
+streamlit>=1.40,<2
+yt-dlp
